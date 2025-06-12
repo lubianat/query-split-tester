@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wikidata Graph Split SPARQL Simple Benchmark</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: #f5f7fb;
+            margin: 0;
+            color: #1f2937;
+            display: flex;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            margin: auto;
+            padding: 2rem;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 160px;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #d1d5db;
+            font-size: 0.95rem;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2rem;
+        }
+
+        th,
+        td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: #f3f4f6;
+        }
+
+        #spinner {
+            display: flex;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 6px solid #d1d5db;
+            border-top: 6px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #111827;
+                color: #f9fafb;
+            }
+
+            textarea {
+                border: 1px solid #374151;
+                background: #1f2937;
+                color: #f9fafb;
+            }
+
+            th {
+                background: #1f2937;
+            }
+
+            td,
+            th {
+                border-color: #374151;
+            }
+
+            button {
+                background: #6366f1;
+            }
+
+            button:hover {
+                background: #4f46e5;
+            }
+
+            .loader {
+                border-color: #374151;
+                border-top-color: #6366f1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Wikidata Graph Split SPARQL Simple Benchmark</h1>
+        <p>Enter any SPARQL query below and benchmark three Wikidata endpoints.</p>
+        <form id="sparql-form">
+            <textarea id="sparql" placeholder="# Write your SPARQL query here..."></textarea>
+            <div style="margin-top:1rem">
+                <button type="submit">Run Benchmark</button>
+            </div>
+        </form>
+
+        <div id="spinner" style="display:none">
+            <div class="loader"></div>
+        </div>
+
+        <table id="results-table" style="display:none">
+            <thead>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Time (ms)</th>
+                    <th># Results</th>
+                    <th>Open in UI</th>
+                    <th>Preview</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        const ENDPOINTS = [
+            { name: 'Scholarly', url: 'https://query-scholarly.wikidata.org/sparql' },
+            { name: 'Standard', url: 'https://query.wikidata.org/sparql' },
+            { name: 'Legacy Full', url: 'https://query-legacy-full.wikidata.org/sparql' }
+        ];
+
+        const form = document.getElementById('sparql-form');
+        const table = document.getElementById('results-table');
+        const tbody = table.querySelector('tbody');
+        const spinner = document.getElementById('spinner');
+
+        function showSpinner(show) { spinner.style.display = show ? 'block' : 'none'; }
+
+        async function runQuery(endpoint, query) {
+            const encoded = encodeURIComponent(query);
+            const url = `${endpoint.url}?query=${encoded}&format=json`;
+            const start = performance.now();
+            const res = await fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } });
+            const duration = performance.now() - start;
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const bindings = (data.results && data.results.bindings) || [];
+            return { endpoint: endpoint.name, time_ms: duration, bindings };
+        }
+
+        function previewBindings(bindings, limit = 5, width = 1000) {
+            const head = bindings.slice(0, limit);
+            const txt = JSON.stringify(head, null, 2).slice(0, width)
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return txt;
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = document.getElementById('sparql').value.trim();
+            if (!query) return alert('Please enter a SPARQL query first!');
+
+            tbody.innerHTML = '';
+            table.style.display = 'none';
+            showSpinner(true);
+
+            try {
+                const promises = ENDPOINTS.map(ep => runQuery(ep, query).catch(err => ({ endpoint: ep.name, error: err.message })));
+                const results = await Promise.all(promises);
+
+                results.forEach(r => {
+                    const epMeta = ENDPOINTS.find(e => e.name === r.endpoint);
+                    let uiRoot = epMeta.url.replace('/sparql', '');
+                    // Standard service uses same host for UI, others might not but we still link
+                    const openUrl = `${uiRoot}/#${encodeURIComponent(query)}`;
+                    const link = r.error ? '—' : `<a href="${openUrl}" target="_blank" rel="noopener">open</a>`;
+
+                    const count = r.error ? 'error' : r.bindings.length;
+                    const preview = r.error ? r.error : previewBindings(r.bindings);
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+            <td>${r.endpoint}</td>
+            <td>${r.error ? 'error' : r.time_ms.toFixed(0)}</td>
+            <td>${count}</td>
+            <td>${link}</td>
+            <td>${r.error ? '—' : `<details><summary>show</summary><pre>${preview}</pre></details>`}</td>
+          `;
+                    tbody.appendChild(tr);
+                });
+
+                table.style.display = '';
+            } catch (err) {
+                console.error(err);
+                alert('Something went wrong. Check console.');
+            } finally {
+                showSpinner(false);
+            }
+        });
+    </script>
+</body>
+
+</html>
