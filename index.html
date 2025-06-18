@@ -5,11 +5,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wikidata Graph Split SPARQL Simple Benchmark</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.min.css" />
     <style>
         * {
             box-sizing: border-box;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Tahoma', sans-serif;
         }
 
         body {
@@ -35,9 +35,11 @@
             border-radius: 0.5rem;
             border: 1px solid #d1d5db;
             font-size: 0.95rem;
+            line-height: 1.5;
         }
 
-        button {
+        button,
+        .preview-btn {
             background: #3b82f6;
             color: white;
             border: none;
@@ -48,8 +50,14 @@
             transition: background 0.2s;
         }
 
-        button:hover {
+        button:hover,
+        .preview-btn:hover {
             background: #2563eb;
+        }
+
+        .preview-btn {
+            font-size: 0.85rem;
+            padding: 0.4rem 0.8rem;
         }
 
         table {
@@ -67,6 +75,11 @@
 
         th {
             background: #f3f4f6;
+        }
+
+        .preview-row td {
+            padding: 1rem;
+            background: #f9fafb;
         }
 
         #spinner {
@@ -111,17 +124,57 @@
                 border-color: #374151;
             }
 
-            button {
+            .preview-row td {
+                background: #0d1117;
+            }
+
+            button,
+            .preview-btn {
                 background: #6366f1;
             }
 
-            button:hover {
+            button:hover,
+            .preview-btn:hover {
                 background: #4f46e5;
             }
 
             .loader {
                 border-color: #374151;
                 border-top-color: #6366f1;
+            }
+
+            /* DataTables Dark Mode Overrides */
+            .dataTables_wrapper,
+            .dataTables_length,
+            .dataTables_filter,
+            .dataTables_info,
+            .dataTables_processing,
+            .dataTables_paginate {
+                color: #f9fafb !important;
+            }
+
+            .dataTables_wrapper .dataTables_length select,
+            .dataTables_wrapper .dataTables_filter input {
+                color: #f9fafb;
+                background-color: #1f2937;
+                border: 1px solid #374151;
+            }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button {
+                color: #f9fafb !important;
+            }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+                color: #6b7280 !important;
+            }
+
+            table.dataTable th,
+            table.dataTable td {
+                border-color: #374151;
+            }
+
+            table.dataTable {
+                border-bottom: 1px solid #374151;
             }
         }
     </style>
@@ -130,9 +183,14 @@
 <body>
     <div class="container">
         <h1>Wikidata Graph Split SPARQL Simple Benchmark</h1>
-        <p>Enter any SPARQL query below and benchmark three Wikidata endpoints.</p>
+        <p>Enter any SPARQL query below and benchmark four Wikidata endpoints.</p>
         <form id="sparql-form">
-            <textarea id="sparql" placeholder="# Write your SPARQL query here..."></textarea>
+            <textarea id="sparql" placeholder="# Write your SPARQL query here...">#This query finds 10 instances of cats with their English labels
+SELECT ?item ?itemLabel WHERE {
+  ?item wdt:P31 wd:Q146.
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+LIMIT 10</textarea>
             <div style="margin-top:1rem">
                 <button type="submit">Run Benchmark</button>
             </div>
@@ -154,13 +212,22 @@
             </thead>
             <tbody></tbody>
         </table>
+        <footer style="text-align: center; margin-top: 2rem; padding: 1rem; color: #6b7280; font-size: 0.9rem;">
+            Source code available at <a href="https://github.com/lubianat/query-split-tester" target="_blank"
+                rel="noopener">GitHub</a>.
+        </footer>
     </div>
+
+
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
 
     <script>
         const ENDPOINTS = [
             { name: 'Scholarly', url: 'https://query-scholarly.wikidata.org/sparql' },
             { name: 'Standard', url: 'https://query.wikidata.org/sparql' },
-            { name: 'Legacy Full', url: 'https://query-legacy-full.wikidata.org/sparql' }
+            { name: 'Legacy Full', url: 'https://query-legacy-full.wikidata.org/sparql' },
         ];
 
         const form = document.getElementById('sparql-form');
@@ -168,25 +235,19 @@
         const tbody = table.querySelector('tbody');
         const spinner = document.getElementById('spinner');
 
-        function showSpinner(show) { spinner.style.display = show ? 'block' : 'none'; }
+        let benchmarkResults = [];
+
+        function showSpinner(show) { spinner.style.display = show ? 'flex' : 'none'; }
 
         async function runQuery(endpoint, query) {
             const encoded = encodeURIComponent(query);
-            const url = `${endpoint.url}?query=${encoded}&format=json`;
+            const url = `${endpoint.url}?query=${encoded}`;
             const start = performance.now();
             const res = await fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } });
             const duration = performance.now() - start;
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
-            const bindings = (data.results && data.results.bindings) || [];
-            return { endpoint: endpoint.name, time_ms: duration, bindings };
-        }
-
-        function previewBindings(bindings, limit = 5, width = 1000) {
-            const head = bindings.slice(0, limit);
-            const txt = JSON.stringify(head, null, 2).slice(0, width)
-                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return txt;
+            return { endpoint: endpoint.name, time_ms: duration, data: data, error: null };
         }
 
         form.addEventListener('submit', async (e) => {
@@ -198,38 +259,95 @@
             table.style.display = 'none';
             showSpinner(true);
 
-            try {
-                const promises = ENDPOINTS.map(ep => runQuery(ep, query).catch(err => ({ endpoint: ep.name, error: err.message })));
-                const results = await Promise.all(promises);
+            benchmarkResults = [];
 
-                results.forEach(r => {
+            try {
+                const promises = ENDPOINTS.map(ep => runQuery(ep, query).catch(err => ({ endpoint: ep.name, error: err.message, data: null })));
+                benchmarkResults = await Promise.all(promises);
+
+                tbody.innerHTML = '';
+                benchmarkResults.forEach((r, index) => {
                     const epMeta = ENDPOINTS.find(e => e.name === r.endpoint);
-                    let uiRoot = epMeta.url.replace('/sparql', '');
-                    // Standard service uses same host for UI, others might not but we still link
+                    const uiRoot = epMeta.url.replace('/sparql', '').replace('/api/wikidata', '');
                     const openUrl = `${uiRoot}/#${encodeURIComponent(query)}`;
                     const link = r.error ? '—' : `<a href="${openUrl}" target="_blank" rel="noopener">open</a>`;
 
-                    const count = r.error ? 'error' : r.bindings.length;
-                    const preview = r.error ? r.error : previewBindings(r.bindings);
+                    const count = r.error ? 'error' : r.data.results.bindings.length;
 
                     const tr = document.createElement('tr');
+                    tr.dataset.resultIndex = index;
                     tr.innerHTML = `
-            <td>${r.endpoint}</td>
-            <td>${r.error ? 'error' : r.time_ms.toFixed(0)}</td>
-            <td>${count}</td>
-            <td>${link}</td>
-            <td>${r.error ? '—' : `<details><summary>show</summary><pre>${preview}</pre></details>`}</td>
-          `;
+                        <td>${r.endpoint}</td>
+                        <td>${r.error ? 'error' : r.time_ms.toFixed(0)}</td>
+                        <td>${count}</td>
+                        <td>${link}</td>
+                        <td>${r.error ? r.error : `<button class="preview-btn">Show Preview</button>`}</td>
+                    `;
                     tbody.appendChild(tr);
                 });
 
-                table.style.display = '';
+                table.style.display = 'table';
             } catch (err) {
                 console.error(err);
                 alert('Something went wrong. Check console.');
             } finally {
                 showSpinner(false);
             }
+        });
+
+        tbody.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('preview-btn')) return;
+
+            const btn = e.target;
+            const parentRow = btn.closest('tr');
+            const resultIndex = parentRow.dataset.resultIndex;
+
+            const existingPreviewRow = parentRow.nextElementSibling;
+            if (existingPreviewRow && existingPreviewRow.classList.contains('preview-row')) {
+                existingPreviewRow.remove();
+                btn.textContent = 'Show Preview';
+                return;
+            }
+
+            const result = benchmarkResults[resultIndex];
+            if (!result || !result.data) return;
+
+            const headers = result.data.head.vars;
+            const bindings = result.data.results.bindings;
+            const tableId = `preview-table-${resultIndex}`;
+
+            const previewRow = document.createElement('tr');
+            previewRow.className = 'preview-row';
+            const previewCell = document.createElement('td');
+            previewCell.colSpan = 5;
+
+            let tableHtml = `<table id="${tableId}" class="display" style="width:100%"><thead><tr>`;
+            headers.forEach(h => tableHtml += `<th>${h}</th>`);
+            tableHtml += '</tr></thead><tbody>';
+
+            bindings.forEach(binding => {
+                tableHtml += '<tr>';
+                headers.forEach(header => {
+                    const cell = binding[header];
+                    const value = cell ? cell.value : '';
+                    const escapedValue = new Option(value).innerHTML;
+                    tableHtml += `<td>${escapedValue}</td>`;
+                });
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+
+            previewCell.innerHTML = tableHtml;
+            previewRow.appendChild(previewCell);
+            parentRow.insertAdjacentElement('afterend', previewRow);
+
+            $(`#${tableId}`).DataTable({
+                responsive: true,
+                pageLength: 5,
+                lengthMenu: [5, 10, 25, 50],
+            });
+
+            btn.textContent = 'Hide Preview';
         });
     </script>
 </body>
