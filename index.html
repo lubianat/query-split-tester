@@ -182,8 +182,8 @@
 
 <body>
     <div class="container">
-        <h1>Wikidata Graph Split SPARQL Simple Benchmark</h1>
-        <p>Enter any SPARQL query below and benchmark four Wikidata endpoints.</p>
+        <h1>Wikidata Graph Split Simple SPARQL Benchmark</h1>
+        <p>Enter any SPARQL query below and benchmark three Wikidata endpoints.</p>
         <form id="sparql-form">
             <textarea id="sparql" placeholder="# Write your SPARQL query here...">#This query finds 10 instances of cats with their English labels
 SELECT ?item ?itemLabel WHERE {
@@ -214,7 +214,8 @@ LIMIT 10</textarea>
         </table>
         <footer style="text-align: center; margin-top: 2rem; padding: 1rem; color: #6b7280; font-size: 0.9rem;">
             Source code available at <a href="https://github.com/lubianat/query-split-tester" target="_blank"
-                rel="noopener">GitHub</a>.
+                rel="noopener">GitHub</a>. For more complex comparisons, you should check <a href="https://github.com/WolfgangFahl/snapquery" target="_blank"
+                rel="noopener">WolfgangFahl's snapquery</a>..
         </footer>
     </div>
 
@@ -226,7 +227,7 @@ LIMIT 10</textarea>
     <script>
         const ENDPOINTS = [
             { name: 'Scholarly', url: 'https://query-scholarly.wikidata.org/sparql' },
-            { name: 'Standard', url: 'https://query.wikidata.org/sparql' },
+            { name: 'Main', url: 'https://query.wikidata.org/sparql' },
             { name: 'Legacy Full', url: 'https://query-legacy-full.wikidata.org/sparql' },
         ];
 
